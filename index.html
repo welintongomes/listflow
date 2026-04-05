@@ -311,7 +311,7 @@
       <button class="ibtn" onclick="importJ()" title="Importar JSON">⬇</button>
     </div>
   </div>
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script>
     // ══════════════════════════════════════════════════════
     //  CORE STATE
@@ -927,6 +927,50 @@ await MeuDB.deletar('meu-id');</pre>
     // ══════════════════════════════════════════════════════
     //  EXPORT / IMPORT JSON
     // ══════════════════════════════════════════════════════
+    // EXPORTAR INDIVIDUAL EM ZIP
+window._gpExportarZip = async function(id) {
+  const lista = await _PluginDB.listar();
+  const p = lista.find(x => x.id === id);
+  if (!p) return;
+
+  const zip = new JSZip();
+  zip.file("plugin.js", p.codigo);
+  zip.file("metadata.json", JSON.stringify({ id: p.id, meta: p.meta, ts: p.ts }, null, 2));
+
+  const content = await zip.generateAsync({ type: "blob" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(content);
+  a.download = `plugin_${p.id}.zip`;
+  a.click();
+  toast('📦 ZIP gerado com sucesso!', 'ok');
+};
+
+// IMPORTAR INDIVIDUAL EM ZIP
+window._gpImportarZip = function() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.zip';
+  inp.onchange = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const codigo = await zip.file("plugin.js").async("string");
+      const metadataStr = await zip.file("metadata.json").async("string");
+      const metadata = JSON.parse(metadataStr);
+
+      await _PluginDB.salvar(metadata.id, codigo, metadata.meta);
+      _executarPluginGlobal(metadata.id, codigo);
+      
+      _gpRender('lista');
+      toast(`✅ Plugin ${metadata.meta.name} importado!`, 'ok');
+    } catch (err) {
+      alert('Erro ao processar arquivo ZIP: ' + err.message);
+    }
+  };
+  inp.click();
+};
+
     function exportJ() {
       const l = getL();
       openM('⬆ Exportar', `
@@ -1344,6 +1388,7 @@ async function _exportTudo() {
                 }
                 <button class="gp-btn" onclick="_gpEditarCodigo('${p.id}')">✏️ Editar</button>
                 <button class="gp-btn danger" onclick="_gpDeletar('${p.id}')">🗑 Remover</button>
+                <button class="gp-btn" onclick="_gpExportarZip('${p.id}')">⬆📦.ZIP</button>
               </div>
             </div>`;
           }).join('');
@@ -1354,6 +1399,9 @@ async function _exportTudo() {
           <div class="gp-tabs">
             <button class="vtab ${s.dataset.subAba!=='arquivo'?'on':''}" onclick="document.getElementById('gpScreen').dataset.subAba='codigo';_gpRender('adicionar')">✏️ Colar código</button>
             <button class="vtab ${s.dataset.subAba==='arquivo'?'on':''}" onclick="document.getElementById('gpScreen').dataset.subAba='arquivo';_gpRender('adicionar')">📁 Importar arquivo</button>
+            <button class="gp-btn pri" style="width:20%;padding:6px;font-size:14px" onclick="_gpImportarZip()">
+  ⬇📦.ZIP
+</button>
           </div>
           ${s.dataset.subAba === 'arquivo' ? `
             <div class="gp-hint">
